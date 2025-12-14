@@ -15,7 +15,7 @@ This guide explains how to set up mDNS reflection between two Ubuntu servers ove
 
 ## Steps
 
-### 1. Install Avahi on Both Servers
+### 1. Install Avahi and wireguard on Both Servers
 
 Avahi is used to handle mDNS traffic.
 
@@ -82,20 +82,61 @@ Ensure WireGuard allows multicast traffic. Edit the WireGuard configuration file
 sudo nano /etc/wireguard/wg0.conf
 ```
 
-Add `224.0.0.0/4` to the `AllowedIPs` for each peer:
+Add `224.0.0.251/32` to the `AllowedIPs` for rpi:
 
 ```ini
+[Interface]
+PrivateKey = REDACTED
+Address = 10.99.10.1/24
+ListenPort = 51830
+
+PostUp = ip link set %i multicast on; iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -A FORWARD -i %i -o eth0 -j ACCEPT; iptables -A FORWARD -i eth0 -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -s 10.99.10.0/24 -j MASQUERADE; iptables -A INPUT -i %i -p udp --dport 5353 -j ACCEPT; iptables -A FORWARD -i %i -p udp --dport 5353 -j ACCEPT
+
+PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -D FORWARD -i %i -o eth0 -j ACCEPT; iptables -D FORWARD -i eth0 -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -s 10.99.10.0/24 -j MASQUERADE; iptables -D INPUT -i %i -p udp --dport 5353 -j ACCEPT; iptables -D FORWARD -i %i -p udp --dport 5353 -j ACCEPT
+
 [Peer]
-PublicKey = <remote-public-key>
-AllowedIPs = 10.88.0.0/24, 224.0.0.0/4
+# Home Assistant
+PublicKey = REDACTED
+AllowedIPs = 10.99.10.2/32, 224.0.0.251/32
+PersistentKeepalive = 25
 ```
 
 Save and restart WireGuard:
 
+
 ```bash
-sudo systemctl restart [email protected]
+sudo systemctl restart wg-quick@wg0
+```
+For homeassistant
+
+```bash
+sudo nano /etc/wireguard/wg0.conf
 ```
 
+Add `224.0.0.251/32` to the `AllowedIPs` for rpi:
+
+```ini
+  GNU nano 6.2                                                                                            /etc/wireguard/wg10.conf
+[Interface]
+PrivateKey = REDASCTED
+Address = 10.99.10.2/24
+
+PostUp = ip link set %i multicast on
+
+[Peer]
+# Raspberry Pi server
+PublicKey = REDASCTED
+Endpoint = 10.99.19.2:51830
+AllowedIPs = 10.99.10.1/32, 224.0.0.251/32
+PersistentKeepalive = 25
+```
+
+Save and restart WireGuard:
+
+
+```bash
+sudo systemctl restart wg-quick@wg0
+```
 ---
 
 ### 4. Test mDNS Reflection
